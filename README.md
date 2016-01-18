@@ -1,1 +1,1 @@
-![cert](Udacity_Data_Analyst_Nanodegree_Jan-2016.pdf)
+![cert](Udacity_Data_Analyst_Nanodegree_Jan-2016.png)
