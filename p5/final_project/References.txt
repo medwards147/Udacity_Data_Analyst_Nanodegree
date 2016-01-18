@@ -1,0 +1,7 @@
+1. https://en.wikipedia.org/wiki/Hyperparameter_optimization
+2. http://scikit-learn.org (all documentation for sklearn classes used in the project and examples provided)
+3. http://stackoverflow.com/ (various threads pertaining to using GridSearch especially)
+4. http://blog.kaggle.com/2015/07/16/scikit-learn-video-8-efficiently-searching-for-optimal-tuning-parameters/
+5. https://github.com/justmarkham/scikit-learn-videos
+
+I hereby confirm that this submission is my work. I have cited above the origins of any parts of the submission that were taken from Websites, books, forums, blog posts, github repositories, etc.

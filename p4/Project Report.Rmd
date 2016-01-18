@@ -1,0 +1,460 @@
+---
+title: "Analysis of 2012 Presidential Campaign Contributions in New York State"
+author: "Max Edwards"
+date: "November 16, 2015"
+output: html_document
+---
+
+# Introduction
+This is an exploration of 2012 US presidential campaign donations in New York State. The dataset used was downloaded from the Federal Election Committee which oversees the public funding of Presidential elections. Based on reviewing the data dictionary provided by the FEC, I will try to answer a series of questions by using various data exploration techniques in R. Questions to consider would be: Who received the most contributions. Where are they coming from (city/zip)? How much money is a typical donation? What are the differences in donations between Republicans and Democrats? Who are the people that are donating (i.e. occupation) and when do they donate during the campaign cycle? 
+
+
+```{r, echo=FALSE, results="hide"}
+library(ggplot2)
+library(ggmap)
+library(dplyr)
+library(gridExtra)
+setwd("C:/Users/MAX/Documents/GitHub/Project4_ExploratoryDataAnalysis")
+data <- read.csv('P00000001-NY.csv', row.names = NULL, stringsAsFactors = FALSE)
+# remove row.name column id
+colnames(data) <- c(colnames(data)[2:length(data)], "remove")
+data <- data[, -length(data)]
+```
+
+## Univariate Exploration
+I will start out by exploring the entire data set general features then each variable that I think is useful for the purposes of answering the questions above. Let's start with the date variable `contb_receipt_dt` as the timeline prior to the election is really important.
+
+### Dataset Features
+```{r, echo=FALSE}
+str(data)
+```
+
+The starting data has 420359 rows and 18 columns. Each row represents a transaction (donation) and each column provides some information about the transaction.
+
+### Date Variable
+
+```{r, echo=FALSE}
+data$date <- as.Date(data$contb_receipt_dt, format = "%d-%b-%y")
+nomimation_date <- as.Date("30-AUG-12", format = "%d-%b-%y")
+election_date <- as.Date("06-NOV-12", format = "%d-%b-%y")
+data$days_from_elec <- as.integer(election_date - data$date)
+
+summary(data$date)
+summary(data$days_from_elec)
+```
+
+I created date as a Date class and then determined when the Republican primary was finished. Per Mitt Romney's Presidential Campaign Wiki, he formally accepted the nomination on August 30th in Tampa, Florida so I used this as the cutoff date to create a days_from_election variable. This will help create some plots and summarizing data over time. It looks like the first contribution was on 2011-01-14 and the last contribution was on 2012-12-31. Interesting considering the election ended in November.
+
+```{r, echo=FALSE}
+qplot(date, data = data, geom = "histogram", binwidth=7)
+```
+
+The plot above shows a histogram of the date variable. This provides shows the frequency of the contributions relative to time. As you can see, more contributions occur closer to the actual general election date.
+
+### Candidate Names 
+
+```{r, echo=FALSE}
+table(data$cand_nm)
+```
+
+There are 14 total candidates in this dataset. The majority of the contributions are to Barack Obama and Mitt Romney is in second. This makes sense as they were the final presidential candiates for their respective party. I'm going to remove Thaddeus McCotter as he only had 5 contributions. Then create a bar chart to observe contribution count by candidate.
+
+```{r, echo=FALSE}
+data <- subset(data, cand_nm != "McCotter, Thaddeus G")
+ggplot(aes(x=cand_nm), data=data) +  geom_bar() + coord_flip() 
+```
+
+Well, it's not even close. Barack Obama and Mitt Romney received a lot more contributions than any other candidate. This makes sense as Mitt Romney won the primary and Obama was running for re-election as a Democrat. It's hard to discern any differences between the rest except for Ron Paul. Let's look at contributions prior to Mitt Romney winning the Republic Primary.
+
+```{r, echo=FALSE}
+ggplot(aes(x=cand_nm), data=subset(data, date < nomimation_date)) +  geom_bar() + coord_flip() 
+```
+
+This plot looks the same but you can atleast see Newt Gingrich and Rick Santorum received more contributions from the others that were not previously mentioned (Obama, Romney, Paul). Time to look at splits by party.
+
+
+```{r, echo=FALSE}
+data$pp <- ifelse(data$cand_nm == "Obama, Barack", c("democrat"), c("republican")) 
+data$pp[data$cand_nm == "Roemer, Charles E. 'Buddy' III"] <- "other" 
+data$pp[data$cand_nm == " Johnson, Gary Earl"] <- "other"
+```
+
+I created the variable `pp` and assigned the appropriate values by candidate. I had to do some digging some of the candidates. Turns out Charles Roemer dropped out of the Republican party and ran under the "Reform Party" and Gary Johnson is a Libertarian. I just assigned these two to "other". Now lets look at a plot.
+
+```{r, echo=FALSE}
+ggplot(aes(x=pp), data=data) + geom_bar(stat="bin", fill=c("blue", "black", "red"))
+```
+
+### Location variables (`contbr_zip` and `contbr_city`)
+
+First I had to clean up the contbr_zip field as it containd 9 digit zips and some zips less than 5 digits. Additionally, New York States zip code range is between 10001 and 14975. I will just remove these rows. When I looked at city, I noticed there were several variations to how city was entered. Some values contained the state in the city field, some were misspelled, and some were abbreviated. Therefore, I decided zip code is a better location based variable to use when exploring contribution locations as it will be easier to clean.
+
+```{r, echo=FALSE}
+zipclean <- function(zip) {
+
+  if(is.na(zip)) {
+    return("99999")
+  }
+  else if(nchar(zip) < 5) {
+    return("99999")
+  }
+  else if(nchar(zip) > 5) {
+    zip <- substring(zip, 0, 5)
+    return(zip)
+  }
+  else {
+    return(zip)
+  }
+}
+data$contbr_zip <- sapply(data$contbr_zip, zipclean)
+```
+
+I know I'm going to want to use ggmap function to make a location based plot so I added in longitude and latitude. The zipcode library is useful to do this. I then joined the zipcode data with the working data.
+
+```{r, echo=FALSE}
+library(zipcode)
+data(zipcode)
+names(data)[names(data) == "contbr_zip"] <- "zip" 
+zipcode <- zipcode[zipcode$state == "NY",]
+data <- inner_join(data, zipcode, by="zip") #
+```
+
+Now I will use ggmap to create a quick map plot.
+
+```{r, echo=FALSE, results="hide"}
+map<-get_map(location = c(min(data$longitude), min(data$latitude), 
+                          max(data$longitude), max(data$latitude)), 
+             zoom=6, maptype = 'roadmap')
+```
+
+```{r, echo=FALSE}
+ggmap(map)+geom_jitter(aes(x=longitude, y=latitude), data=data , alpha=.3)
+```
+
+Thats a start, I'll examine this further in my final plots. Possibly split out by party (diff color dots). I'd expect more red in usptate NY (Republican) and a lot of blue in NYC area (democrat).
+
+### Contribution Amounts
+  
+```{r, echo=FALSE}
+summary(data$contb_receipt_amt) # total money contributed
+sum(data$contb_receipt_amt)
+```
+The mean transaction is $225.8 and total money contributed was approximately $94.6M. The min and max transactions are interesting - one for -$60,800 (min) and a transaction of $60,800 (max). This seems there was a mistake or possibly a refund.
+
+```{r, echo=FALSE}
+length(data$contb_receipt_amt[data$contb_receipt_amt < 0]) # number of negative transactions in dataset
+unique(data$receipt_desc[data$contb_receipt_amt < 0]) # see memo text for negative transactions
+table(data$receipt_desc[data$contb_receipt_amt < 0]) # see a count of each memo transaction (for negatives)
+sum(data$contb_receipt_amt[data$contb_receipt_amt < 0]) # Total money taken back
+data[data$contb_receipt_amt == -60800 | data$contb_receipt_amt == 60800 ,] # min/max transactions
+dim(data[data$contb_receipt_amt == 0 ,])[1] # amount of zero transactions
+table(cut(data$contb_receipt_amt, breaks = seq(0,70000,5000)))
+table(cut(data$contb_receipt_amt, breaks = seq(-70000,0,5000)))
+data <- data[data$contb_receipt_amt > -60800 | data$contb_receipt_amt < 60800,]
+```
+There were 4795 total negative transactions. "Refund" accounted for the majority of the receipt descriptions (3,752 transactions).  As for the $60,800, it looks like the same contributor received their money back with a receipt description of "refund". I removed these from the dataset. Also, based on cutting the transaction data, it looks like all but 9 positive transactions fall between 0 and $5000, 497 transactions are for $0, and all but 31 negative transactions fall between $0-5000.
+
+
+```{r, echo=FALSE}
+qplot(data = subset(data, contb_receipt_amt <= 3500 & contb_receipt_amt >= 0), 
+      x = contb_receipt_amt, binwidth = 25) + 
+  scale_x_continuous(breaks = seq(0,3500,250))
+```
+
+The distribution of the transaction amounts is right skewed. Additionally, most of the transactions are less than or equal to $100. Finally, you can tell $500, $1000, and $2500 were standard dontations. That makes sense as most people wouldn't pick a random number. However, I do find it interesting that $2,500 was really common (compared to $1500 and $2000). Maybe this was a recommended amount by campaign donation soliciters?
+
+### Election Type
+
+```{r, echo=FALSE}
+table(data$election_tp)
+data <- data[data$election_tp == "G2012" | data$election_tp == "P2012",]
+```
+
+`election_tp` containd some transactions that are not of interest (i.e. 2008). I removed everything but G2012 (general election contributions) and P2012 (primary contributions).
+
+
+## Univariate Analysis Questions
+
+### What is the structure of your dataset?
+
+```{r, echo=FALSE}
+str(data)
+```
+
+The dataset after I cleaned it up and added some new columns consisted of 418,410 observations and 25 variables.
+
+### What is/are the main feature(s) of interest in your dataset?
+
+I believe the main features of interest are `cand_nm` and the `contb_receipt_amt`.
+
+### What other features in the dataset do you think will help support your investigation into your feature(s) of interest?
+
+`pp` (political party), `latitude`, `longitude`, `contbr_occupation`, `election_tp`, `date`, `days_from_elec`
+
+### Did you create any new variables from existing variables in the dataset?
+
+I added `pp` (political party), `latitude`, `longitude`, `days_from_elec`.
+
+### Of the features you investigated, were there any unusual distributions? Did you perform any operations on the data to tidy, adjust, or change the form of the data? If so, why did you do this?
+
+There weren't any distrubitions that were that surprising or what I would consider unusual. I cleaned the `contbr_zip` field to contain only 5 digit zips and joined with the zipcode data filtered by NY state. This created the latitude and longitude fields which will be useful for mapping. I also cleaned out `election_tp` to show transactions only for general and primary elections. This helped as it removed unwanted data and will allow for easier grouping (only 2 unique values).
+
+## Bivariate Exploration
+
+I want to look at contributions over time. I already looked at the count of contributions but now I want to look at the amount of money over time. 
+
+### Time Series of Contributions Amounts
+```{r, echo=FALSE}
+time_plot <- filter(data, contb_receipt_amt > 0, contb_receipt_amt <= 10000, !is.na(date))
+ggplot(aes(x=date, y = contb_receipt_amt), data = time_plot) + 
+  geom_point(alpha = .2, position = 'jitter')
+```
+
+I filtered the data to remove negative transactions and any transactions over $10k. This plot is shows the different levels of contributions but it's really hard to tell the amount of money in a certain discrete time period. If you look close, you do see an increase in the contibutions in late 2012. Let's look by month for each year.
+
+```{r, echo=FALSE}
+data$year = as.numeric(format(data$date, "%Y"))
+data$month = as.integer(format(data$date, "%m"))
+time_data <- data %>% filter(pp != "other", contb_receipt_amt > 0) %>% 
+  group_by(year, month, pp) %>% 
+  summarise(contb_sum = sum(contb_receipt_amt))
+ggplot(data = time_data, aes(x=month, y = contb_sum)) + 
+  geom_bar(stat = "identity") + 
+  facet_grid(~year) + 
+  scale_x_continuous(limit = c(0,12), breaks = seq(1,12,1))
+```
+
+As expected, there is an increasing trend in contributions a significant amount contriubted in Sept/Oct 2012.
+
+### Contributions Amonts Received by Candidate
+```{r, echo=FALSE}
+ggplot(data = data, aes(x=cand_nm, y=contb_receipt_amt)) + 
+  geom_boxplot() + coord_cartesian(ylim = c(-4000, 4000)) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+What I find most interesting here how compact the contributions at low dollar amounts were for Barack Obama even tho he had highest contbribution total. You can really see this in the boxplot as his box portion is essentially centered what looks like around $0-$50. Mit Romney on the other has a box longer dispersed box indicating there was a little more variance in his contributions versus Obama. 
+
+### Contributions by party
+
+```{r, echo=FALSE}
+party_data <- data %>% filter(pp != 'other') %>% 
+  group_by(pp) %>% 
+  summarize(contb_sum = sum(contb_receipt_amt))
+ggplot(data = party_data, aes(x=pp, y=contb_sum)) + geom_bar(stat = 'identity')
+```
+
+More money was donated to Obama (Democrat) compared to total Republican donations.
+
+### Contributions by Occupation
+```{r, echo=FALSE}
+occ_data <- data  %>% group_by(contbr_occupation) %>% 
+  summarize(contb_sum = sum(contb_receipt_amt)) %>% arrange(-contb_sum) %>% 
+  filter(contb_sum > 1500000)
+ggplot(data = occ_data, aes(x=reorder(contbr_occupation, -contb_sum), y=contb_sum)) + 
+  geom_bar(stat = 'identity') + 
+  theme(axis.text.x = element_text(angle = 20, hjust = 1))
+```
+
+Well, retired people are donating the most money. That is interesting. Glad my social security contributions is being put to something other than those one arm bandits (slot machines)!
+
+### Conbributions by city
+```{r, echo=FALSE}
+data %>% group_by(city) %>% 
+  summarise(contb_amt = sum(contb_receipt_amt), count = n()) %>% 
+  arrange(-contb_amt) %>% 
+  mutate(contb_amt_per_trans = contb_amt / count) %>% 
+  filter(contb_amt > 590000)
+```
+
+No surpirse that NYC toppped the list on the contb amount. However, they did not top the list on a per transaction basis. Rye holds that distinction for the cities in the top 10. I know the area quite well and Rye is certainly a wealthy area so this makes sense. 
+
+## Bivariate Analysis Questions
+
+### Talk about some of the relationships you observed in this part of the investigation. How did the feature(s) of interest vary with other features in the dataset?
+
+Contributions over time increased and substantially increased in the final months prior to the general election. Not a huge surprise.
+
+### Did you observe any interesting relationships between the other features (not the main feature(s) of interest)?
+
+Contributions vary more in size with the Republican candidates. Obama on the other hand, generated most of his contributions via low dollar amounts. Additionally, people that are retired donated the most money. 
+
+### What was the strongest relationship you found?
+The most relevant and strongest relationship is the increase in contributions over time. Again, this is no surprise.
+
+## Multivariate Exploration
+
+### Contributions Amounts over time by party
+```{r, echo=FALSE}
+time_data <- data %>% filter(pp != "other", contb_receipt_amt > 0) %>% 
+  group_by(year, month, pp) %>% 
+  summarise(contb_sum = sum(contb_receipt_amt))
+ggplot(data = time_data, aes(x=month, y = contb_sum, fill = pp)) + 
+  geom_bar(stat = "identity") + 
+  facet_grid(~year) + 
+  scale_fill_manual(values=c("blue", "red")) + 
+  scale_x_continuous(limit = c(0,12), breaks = seq(1,12,1))
+```
+
+This splits out the contribution amount over time by party. Interesting, however lets look at the same thing except for number of contributions.
+
+### Contribution number over time by party
+```{r, echo=FALSE}
+time_data <- data %>% filter(pp != "other", contb_receipt_amt > 0) %>% 
+  group_by(year, month, pp) %>% 
+  summarise(contb_sum = sum(contb_receipt_amt), count = n())
+ggplot(data = time_data, aes(x=month, y = count, fill = pp)) + 
+  geom_bar(stat = "identity") + facet_grid(~year)  + 
+  scale_fill_manual(values=c("blue", "red")) + 
+  scale_x_continuous(limit = c(0,12), breaks = seq(1,12,1))
+```
+
+Wow. This shows that Obama (the only Democrat) really dominated the amount of contributions. Even while the Republic Primary was going on.
+
+### Contribution by Occupation to which Party
+```{r, echo=FALSE}
+# I removed blank occupation values
+occ_data <- data %>% filter(contb_receipt_amt >0, pp != "other") %>% 
+  filter(contbr_occupation != "", contbr_occupation !="INFORMATION REQUESTED PER BEST EFFORTS", contbr_occupation != "INFORMATION REQUESTED") %>% 
+  group_by(pp,contbr_occupation) %>% 
+  summarize(contb_sum = sum(contb_receipt_amt)) %>% 
+  arrange(desc(contb_sum)) %>% 
+  filter(contb_sum > 1000000)
+     
+ggplot(data = occ_data, aes(x=pp, y=contb_sum, fill = contbr_occupation)) + geom_bar(stat = 'identity')
+```
+
+I filtered by occupation and party and then filtered the sum conbributions. This gives you the general idea of who donated to which party. Republicans both share the top 2 with retired people and attorneys. Republicans receive more their money from bankers, finance, and exectuives while Democrats receive more of their money from Investors, Physicians, and Professors.
+
+### Contribution by area by Party
+This shows data split out by party by zipcode. One of my final plots will show the contribution amounts on a map by party. For now, this just shows an outline of NY. You can see clustering around the major cities. If you know NY, you'll know which city is which without the map.
+```{r, echo=FALSE}
+zip_data <- filter(data, pp != "other") %>% 
+  group_by(zip, pp) %>%   
+  summarize(n = n(), total = sum(contb_receipt_amt)) %>%  
+  mutate(pct = n/sum(n))
+
+# Determine winner of the zip code in terms of # of contributions
+zip_data <- left_join(zip_data, zipcode, by = "zip")
+zip_data <- zip_data[zip_data$pp == "republican",]
+zip_data$party_winner_area <- ifelse(zip_data$pct > .5, "republican", "democrat")
+
+ggplot(aes(x=longitude, y=latitude, colour=party_winner_area), data=zip_data) + geom_jitter(alpha = .3) + scale_color_manual(values=c("blue", "red"))
+```
+
+## Multivariate Analysis Questions
+I decided to look at the comparison over contributions by party. I did this mainly because I know most of the Republican contributions went to Romney while all the Democratic contributions went to Obama. It was easier to explore the data using a binary variable instead of splitting out by candidate. I will split out by candidate in my final plot though (only the top 5 though).
+
+### Talk about some of the relationships you observed in this part of the investigation. Were there features that strengthened each other in terms of looking at your feature(s) of interest?
+I observed the amount of contributions over time compared to the conbtribution amounts over time by party. You can see that the conbribution amounts look relatively even (favoring Obama slightly) but the total contributions heavily favored Obama. This isn't surprising to me given the demographics of the different parties and the fact that NY is always a blue state. 
+
+### Were there any interesting or surprising interactions between features?
+I wasn't really surprised by much of the analysis. NY state is really predictable. It's a blue state and the data has really shown that. The biggest surprise I see is the clustering of red in the area I'm from (Utica, NY). I never would of guessed that.
+
+## Final Plots and Summary
+
+I created three plots that I thought summarized the most interesting things I found while exploring the data. 
+* Plot One. Contributions over time
+* Plot Two. Contibution winners by area (zipcode)
+* Plot Three. Contributions by party by occupation
+
+### Plot One - Contributions over time
+
+The main thing I'm interested in is contributions over time. As we were able to learn in data exploration phase, Obama received a lot of lower dollar contributions while the Republicans - mainly Romney at the end - received the higher dollar lower volume contributions. The following plot is my attempt to display this information. I only included the Republicans that were in it to the end of the Republican primary to keep things clean. 
+
+You really can see a lot here.  Obama really dominated in the number of contributions but Romney kept it pretty close in the total amount of contributions. Pretty cool. Note that the Y values are in log_scale so even though Romney looks really close to Obama at the end in terms of contribution amount, he still received $10M less than Obama in NY. The point of this plot is to show the disparity in contbitution amount versus number of contributions. Also of note, you can see the rise of Rick Santorum in early 2012 when he was trailing in the primaries. I remember he kind of came out of no where to be a real contender in the Republican primary and this aligns with my memory!
+```{r, echo=FALSE}
+pre_elec <- filter(data, date < election_date, cand_nm %in% c("Obama, Barack", "Romney, Mitt", "Paul, Ron", "Gingrich, Newt", "Santorum, Rick")) %>%  
+  group_by(cand_nm, date) %>% 
+  summarize(n = n(), contb_total = sum(contb_receipt_amt)) %>%  
+  mutate(cumn = cumsum(n), cumtotal = cumsum(contb_total))
+
+p1 <- ggplot(aes(x = date, y = cumtotal, color = cand_nm), data = pre_elec) +  scale_y_log10() +
+      ggtitle("Cumulative Contribution amount by Candidate") +
+      ylab("Cumulative Contribution $") +
+      xlab("Date") +
+      geom_smooth(stat = 'identity')
+p2 <- ggplot(aes(x = date, y = cumn, color = cand_nm),  data = pre_elec) + scale_y_log10() +
+      ggtitle("Cumumalitve Number of Contributions by Candidate") +
+      ylab("Cumulative # of Contributions") +
+      xlab("Date") +
+      geom_smooth(stat = 'identity')
+grid.arrange(p1, p2)
+```
+
+
+### Plot Two - Contributions by area (zipcode)
+Time for the Map. I created this in the multivariate exploration section but now I'm adding the overlay of a map extracted using the get_map function and then ggmap. As you can see, there are clusters of blue in the cities with red sprinkled throughout the state. Again this is no surprise.
+
+```{r, echo=FALSE, results = "hide"}
+map<-get_map(location = c(min(data$longitude), min(data$latitude), max(data$longitude), max(data$latitude)), zoom=7, maptype = "roadmap", color = 'bw')
+```
+
+```{r, echo=FALSE}
+ggmap(map) + geom_jitter(aes(x=longitude, y=latitude, color=party_winner_area), 
+                         alpha = .3, data=zip_data) + 
+  scale_color_manual(values=c("blue", "red")) + 
+  ggtitle("Party Winner for Number of Contributions") +
+  guides(fill = guide_legend(title = "Political Party Winner of Zip Code"))
+
+
+# Map of NYC
+#map_nyc<-get_map(location = c(-74.1, 40.5, -73.5, 41.2), maptype = "roadmap", color = 'bw')
+#
+#ggmap(map_nyc) + geom_jitter(aes(x=longitude, y=latitude, color=party_winner_area), alpha = .7, data=zip_data) + #scale_color_manual(values=c("blue", "red"))
+```
+
+### Plot Three - Contributions by Occupation by Party
+I think exploring contributions based on the occupation is interesting. That's why I chose it for my last plot. I decided to seperate out the top occupation contributors as there were way too many unique values due to the varying ways people recorded their occupation. However, this captures the essense of the most general occupations such as exectuive, finance, physician, and retired. Overall, you can see that Retired people donated more to the democrats while people in Finance contributed more to Republicans. What was surprising was the difference in the lawyer contributions as Obama received significantly more from that category.
+```{r, echo=FALSE}
+
+occ_data2 <- data  %>% group_by(contbr_occupation) %>% summarize(contb_sum = sum(contb_receipt_amt)) %>% arrange(-contb_sum) %>% filter(contb_sum > 500000)
+
+clean_occ <- function(occ) {
+  if(occ %in% c("ATTORNEY", "LAWYER")) {
+    occ <- "LAWYER"
+  }
+  else if(occ %in% c("FINANCE", "BANKER", "INVESTOR", "INVESTMENT BANKER")) {
+    occ <- "FINANCE"
+  }
+  else if(occ %in% c("CEO", "PRESIDENT", "EXECUTIVE")) {
+    occ <- "EXECUTIVE"
+  }
+  else if(occ %in% c("PROFESSOR", "TEACHER")) {
+    occ <- "EDUCATOR"
+  }
+  else {
+    occ <- occ
+  }
+return(occ)
+}
+top_occs <- head(occ_data2, 20)$contbr_occupation
+top_occs <- top_occs[top_occs != "INFORMATION REQUESTED PER BEST EFFORTS"]
+top_occs <- top_occs[top_occs != "INFORMATION REQUESTED"]
+data$contbr_occupation <- sapply(data$contbr_occupation, clean_occ)
+filt_occs <- data[data$contbr_occupation %in% top_occs,]
+filt_occs <- filt_occs %>% filter(pp != 'other', contb_receipt_amt > 0)
+
+ggplot(data = filt_occs, aes(x=contbr_occupation, y = contb_receipt_amt, fill = pp)) +
+  geom_bar(stat="identity") + 
+  facet_grid(~pp) + 
+  theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  ggtitle("Contribution Amount by Occupation by Party") +
+  xlab("Occupation") +
+  ylab("Contriubtion Amount") + scale_fill_manual(values = c("blue", "red")) +
+  guides(fill = guide_legend(title = "Political Party"))
+
+```
+
+# Reflection
+To explore the data, I first examined the structure of the dataset. I quickly learned that most of my analysis would revolve around the contribution amounts and number of contributions as there wasn't a lot of continuous data. I also saw there was a date variable which I could convert to Date class and then perform some analysis over time. I examined each univariate that I thought was useful and cleaned or created a few variables such as political party, month, year, latitude, longitude, and days from election.
+
+I used these newly crafted and cleaned variables to examine the relationships of the data. I learned that contributions over time increase and that a significant amount of contributions are provided in the last two months prior ot the general election. I found that retired population contributes a singificant amount and confirmed that NY State is infact a "blue" state (for 2012) by mapping party winners by zipcode. Finally and most importantly, I gleaned that there was a significant difference in the amount of contributions between Obama and the Republicans. People who donated to Republicans (mainly Romney) tended to donate larger amounts while people who donated to Obama tended to donate smaller amounts. 
+
+If I were to model the data, I'd imagine the pure volume of contributions would be a good indicator for who will win the state in the general election. I think it would be a good exercise cycle through dataset for each state and look at which candidate received the most amount of contributions. I would be interested to see if that simple heuristic was an accurate representation of who actually won the state in the 2012 election. 
+
+# References
+* http://fec.gov/disclosurep/PDownload.do
+* http://kbroman.org/knitr_knutshell/pages/Rmarkdown.html
+* http://www.inside-r.org/packages/cran/ggmap/docs/get_map
+* https://journal.r-project.org/archive/2013-1/kahle-wickham.pdf
