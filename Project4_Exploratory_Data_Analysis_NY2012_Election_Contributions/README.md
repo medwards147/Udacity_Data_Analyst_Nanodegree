@@ -1,1 +1,3 @@
-![Project_Report](Project Report.pdf)
+# Exploratory Data Analysis
+
+See project report [here](Project_Report.pdf)
