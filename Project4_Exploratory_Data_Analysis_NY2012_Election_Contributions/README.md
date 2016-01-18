@@ -1,3 +1,3 @@
-# Exploratory Data Analysis
+# Exploratory Data Analysis of NY State 2012 Presidential Electrion Contributions
 
-See project report [here](Project_Report.pdf)
+See project report [HERE](Project_Report.pdf)
