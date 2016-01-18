@@ -2,7 +2,7 @@
 title: "Analysis of 2012 Presidential Campaign Contributions in New York State"
 author: "Max Edwards"
 date: "November 16, 2015"
-output: html_document
+output: pdf_document
 ---
 
 # Introduction
@@ -14,7 +14,7 @@ library(ggplot2)
 library(ggmap)
 library(dplyr)
 library(gridExtra)
-setwd("C:/Users/MAX/Documents/GitHub/Project4_ExploratoryDataAnalysis")
+setwd("C:/Users/MAX/Documents/Udacity_Data_Analyst_Nanodegree/Project4_Exploratory_Data_Analysis_NY2012_Election_Contributions")
 data <- read.csv('P00000001-NY.csv', row.names = NULL, stringsAsFactors = FALSE)
 # remove row.name column id
 colnames(data) <- c(colnames(data)[2:length(data)], "remove")
