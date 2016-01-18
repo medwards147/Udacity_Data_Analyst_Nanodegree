@@ -1,5 +1,5 @@
 import pandas
-import pandasql
+import pandasql             
 import csv
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,7 +12,7 @@ def num_rainy_days(filename):
     weather_data = pandas.read_csv(filename)
     weather_data.rename(columns = lambda j: j.replace(' ', '_').lower(), 
                         inplace=True)
-    
+
     q = """
     SELECT count(*)
     FROM weather_data
@@ -248,5 +248,4 @@ if __name__ == '__main__':
     fix_turnstile_data(['turnstile_110528.txt'])
     print open('updated_turnstile_110528.txt').read()
     create_master_turnstile_file(['updated_turnstile_110528.txt'], 'master_turnstile.txt')
-    print filter_by_regular('master_turnstile.txt')
-    
+    print filter_by_regular('master_turnstile.txt')    

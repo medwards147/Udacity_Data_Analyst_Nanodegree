@@ -37,18 +37,36 @@ def entries_histogram(turnstile_weather):
     '''
 
     df = pandas.read_csv(turnstile_weather)
-    
+
     plt.figure()
-    
+
     df['ENTRIESn_hourly'][df['rain'] == 0].hist(alpha = 0.5) # historgram for hourly entries when it is raining
     df['ENTRIESn_hourly'][df['rain'] == 1].hist(alpha = 0.5) # historgram for hourly entries when it is not raining
-    
+
     plt.suptitle('Histogram of Entries Hourly')
     plt.xlabel('Entries Hourly')
     plt.ylabel('Frequency')
     plt.legend(['No Rain', 'Rain'])
-    
+
     return plt
+
+def day_of_week_plot(turnstile_weather):
+    
+    # data frame using turnstile weather_data. Formatting date column to use dayofweek method
+    df = pandas.read_csv(turnstile_weather)
+    df['DATEn_formatted'] = pandas.to_datetime(df['DATEn'], format='%Y-%m-%d')
+    df['dayofweek'] = df['DATEn_formatted'].apply(lambda x: x.dayofweek)
+    
+    # group data using groupby function and aggregate method
+    grouped = df.groupby(['dayofweek'], as_index=False).aggregate(np.mean)
+    
+    # create plot to show average entries by each day of week
+    plot = ggplot(aes('dayofweek', 'ENTRIESn_hourly'), grouped) + \
+    geom_point(color = 'black') +geom_line(color = 'red') + \
+    ggtitle("NYC Subway Riders by Day of Week") + \
+    xlab("Day of Week (0 = Monday, 6 = Sunday)")
+    
+    return plot    
 
 def mann_whitney_plus_means(turnstile_weather):
     '''
@@ -163,6 +181,7 @@ def predictions(dataframe):
 if __name__ == '__main__':
     filename = 'turnstile_data_master_with_weather.csv'
     print entries_histogram(filename)
+    print day_of_week_plot(filename)
     print mann_whitney_plus_means(filename)
     test_results = mann_whitney_plus_means(filename)
     print "this is", test_results[1]
