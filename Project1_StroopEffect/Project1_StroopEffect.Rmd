@@ -2,7 +2,7 @@
 title: "Project1_StroopEffect"
 author: "Max"
 date: "October 14, 2015"
-output: html_document
+output: pdf_document
 ---
 
 #Statistics: The Science of Decisions Project Instructions
