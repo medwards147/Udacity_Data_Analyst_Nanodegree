@@ -17,17 +17,29 @@ The histogram (see Section 3) of the hourly entries when it was raining and not 
 I ran the following code to obtain the results from performing a Mann-Whitney U test.
 
 `turnstile_weather = 'turnstile_data_master_with_weather.csv'
+
 df = pandas.read_csv(turnstile_weather)
+
 with_rain_mean = np.mean(df['ENTRIESn_hourly'][df['rain'] == 1])
+
 without_rain_mean = np.mean(df['ENTRIESn_hourly'][df['rain'] == 0])
+
 x = df['ENTRIESn_hourly'][df['rain'] == 1]
+
 y = df['ENTRIESn_hourly'][df['rain'] == 0]
+
 U, p = scipy.stats.mannwhitneyu(x,y)
+
 U = U*2 # for two tail
+
 p = p*2 # for two tail
+
 print with_rain_mean
+
 print without_rain_mean
+
 print U
+
 print p`
 
 Output of code I wrote is below. Note: I tried to update my scipy package but that did not seem to change my results. Previous grader suggested I should be receiving a p-value of ~0.25:
